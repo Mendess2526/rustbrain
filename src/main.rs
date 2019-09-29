@@ -7,14 +7,6 @@ use std::{
     io::{self, BufReader, BufWriter, Read, Write},
 };
 
-fn read_script() -> io::Result<Vec<u8>> {
-    let filename = env::args().nth(1).expect("Please provide a file");
-    let mut file = File::open(&filename)?;
-    let mut script = Vec::with_capacity(fs::metadata(filename)?.len() as usize);
-    file.read_to_end(&mut script)?;
-    Ok(script)
-}
-
 #[derive(Debug, Default)]
 #[cfg(feature = "true-infinite")]
 struct Memory {
@@ -42,15 +34,12 @@ impl Default for Memory {
 }
 
 impl Memory {
-    #[allow(clippy::collapsible_if)]
+    #[cfg(feature = "true-infinite")]
     fn fill_to_ptr(&mut self) {
-        #[cfg(feature = "true-infinite")]
-        {
-            if self.is_back && self.back_ptr >= self.back.len() {
-                self.back.resize_with(self.back_ptr + 1, Default::default);
-            } else if self.ptr >= self.vec.len() {
-                self.vec.resize_with(self.ptr + 1, Default::default);
-            }
+        if self.is_back && self.back_ptr >= self.back.len() {
+            self.back.resize_with(self.back_ptr + 1, Default::default);
+        } else if self.ptr >= self.vec.len() {
+            self.vec.resize_with(self.ptr + 1, Default::default);
         }
     }
 
@@ -91,9 +80,9 @@ impl Memory {
     }
 
     fn plus(&mut self) {
-        self.fill_to_ptr();
         #[cfg(feature = "true-infinite")]
         {
+            self.fill_to_ptr();
             if self.is_back {
                 self.back[self.back_ptr] = self.back[self.back_ptr].wrapping_add(1);
             } else {
@@ -107,9 +96,9 @@ impl Memory {
     }
 
     fn minus(&mut self) {
-        self.fill_to_ptr();
         #[cfg(feature = "true-infinite")]
         {
+            self.fill_to_ptr();
             if self.is_back {
                 self.back[self.back_ptr] = self.back[self.back_ptr].wrapping_sub(1);
             } else {
@@ -123,9 +112,9 @@ impl Memory {
     }
 
     fn store(&mut self, byte: u8) {
-        self.fill_to_ptr();
         #[cfg(feature = "true-infinite")]
         {
+            self.fill_to_ptr();
             if self.is_back {
                 self.back[self.back_ptr] = byte;
             } else {
@@ -139,9 +128,9 @@ impl Memory {
     }
 
     fn load(&mut self) -> u8 {
-        self.fill_to_ptr();
         #[cfg(feature = "true-infinite")]
         {
+            self.fill_to_ptr();
             if self.is_back {
                 self.back[self.back_ptr]
             } else {
@@ -155,9 +144,9 @@ impl Memory {
     }
 
     fn debug(&mut self) -> bool {
-        self.fill_to_ptr();
         #[cfg(feature = "true-infinite")]
         {
+            self.fill_to_ptr();
             let tape = format!(
                 "{} back:{}",
                 self.back
@@ -213,11 +202,11 @@ impl Memory {
     }
 }
 
-pub fn interpret(bytes: Vec<u8>) -> Result<(), Error> {
-    let sin = io::stdin();
-    let mut stdin = BufReader::new(sin.lock());
-    let sout = io::stdout();
-    let mut stdout = BufWriter::new(sout.lock());
+pub fn interpret<R: Read, W: Write>(
+    bytes: Vec<u8>,
+    mut stdin: R,
+    mut stdout: W,
+) -> Result<(), Error> {
     let mut memory = Memory::default();
     let mut loop_counter = Vec::with_capacity(30);
     let mut ptr = 0;
@@ -239,8 +228,10 @@ pub fn interpret(bytes: Vec<u8>) -> Result<(), Error> {
                             b']' => skip_loop_counter -= 1,
                             _ => (),
                         }
-                        if skip_loop_counter == 0 { break; }
-                    };
+                        if skip_loop_counter == 0 {
+                            break;
+                        }
+                    }
                 }
             }
             b']' => {
@@ -266,6 +257,18 @@ pub fn interpret(bytes: Vec<u8>) -> Result<(), Error> {
     Ok(())
 }
 
+fn read_script() -> io::Result<Vec<u8>> {
+    let filename = env::args().nth(1).expect("Please provide a file");
+    let mut file = File::open(&filename)?;
+    let mut script = Vec::with_capacity(fs::metadata(filename)?.len() as usize);
+    file.read_to_end(&mut script)?;
+    Ok(script)
+}
+
 fn main() -> Result<(), Error> {
-    interpret(read_script()?)
+    let sin = io::stdin();
+    let stdin = BufReader::new(sin.lock());
+    let sout = io::stdout();
+    let stdout = BufWriter::new(sout.lock());
+    interpret(read_script()?, stdin, stdout)
 }
