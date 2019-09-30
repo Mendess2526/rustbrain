@@ -237,16 +237,23 @@ pub fn interpret<R: Read, W: Write>(
             b']' => {
                 if memory.load() != 0 {
                     ptr = loop_counter.pop().ok_or_else(|| Error::at_byte(ptr))? - 1;
+                } else {
+                    loop_counter.pop();
                 }
             }
             b',' => {
                 let mut byte = [0];
-                stdin.read_exact(&mut byte)?;
+                if let Err(e) = stdin.read_exact(&mut byte) {
+                    if e.kind() != io::ErrorKind::UnexpectedEof {
+                        return Err(e.into());
+                    }
+                }
                 memory.store(byte[0]);
             }
             b'.' => {
                 let byte = [memory.load()];
                 stdout.write_all(&byte)?;
+                stdout.flush()?;
             }
             _ => (),
         }
@@ -269,6 +276,5 @@ fn main() -> Result<(), Error> {
     let sin = io::stdin();
     let stdin = BufReader::new(sin.lock());
     let sout = io::stdout();
-    let stdout = BufWriter::new(sout.lock());
-    interpret(read_script()?, stdin, stdout)
+    interpret(read_script()?, stdin, sout.lock())
 }
